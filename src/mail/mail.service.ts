@@ -1,15 +1,65 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import * as nodemailer from 'nodemailer';
 
 export type OtpMailPurpose = 'EMAIL_VERIFICATION' | 'PASSWORD_RESET';
 
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter | null = null;
 
-  constructor() {
+  constructor(
+    @InjectQueue('mail-queue') private readonly mailQueue: Queue,
+  ) {
     this.initTransporter();
+  }
+
+  async onModuleInit() {
+    await this.checkRedisConnection();
+  }
+
+  private async checkRedisConnection(): Promise<void> {
+    const host = process.env.REDIS_HOST || 'localhost';
+    const port = process.env.REDIS_PORT || '6379';
+
+    try {
+      // Timeout promise so app startup never hangs if Redis is unreachable
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Connection check timed out after 3000ms`)),
+          3000,
+        ),
+      );
+
+      await Promise.race([this.mailQueue.waitUntilReady(), timeoutPromise]);
+
+      let redisVersion = 'unknown';
+      try {
+        const client = await (
+          (this.mailQueue as any).client ||
+          (this.mailQueue as any).backend?.client
+        );
+        if (client) {
+          const info = await client.info();
+          const match = info.match(/redis_version:([^\r\n]+)/);
+          if (match) {
+            redisVersion = match[1].trim();
+          }
+        }
+      } catch {
+        // Ignore info parsing if restricted
+      }
+
+      this.logger.log(
+        `[BullMQ] ✅ Redis connected successfully (${host}:${port}) | Redis Version: ${redisVersion} | Queue [mail-queue] is ready`,
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `[BullMQ] ❌ Failed to connect to Redis at ${host}:${port}: ${err.message}. Background jobs will not be processed until Redis server is running!`,
+      );
+    }
   }
 
   private initTransporter() {

@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { MailService, OtpMailPurpose } from './mail.service';
@@ -16,6 +16,38 @@ export class MailProcessor extends WorkerHost {
 
   constructor(private readonly mailService: MailService) {
     super();
+  }
+
+  @OnWorkerEvent('ready')
+  onReady() {
+    this.logger.log('🚀 BullMQ Worker is ready and listening for jobs in [mail-queue]');
+  }
+
+  @OnWorkerEvent('active')
+  onActive(job: Job<SendOtpJobPayload>) {
+    this.logger.log(
+      `⚡ Job #${job.id} [${job.name}] started processing for ${job.data?.email || 'unknown'}`,
+    );
+  }
+
+  @OnWorkerEvent('completed')
+  onCompleted(job: Job<SendOtpJobPayload>) {
+    this.logger.log(
+      `✅ Job #${job.id} [${job.name}] completed successfully for ${job.data?.email || 'unknown'}`,
+    );
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<SendOtpJobPayload> | undefined, error: Error) {
+    this.logger.error(
+      `❌ Job #${job?.id || 'unknown'} [${job?.name || 'unknown'}] failed: ${error.message}`,
+      error.stack,
+    );
+  }
+
+  @OnWorkerEvent('error')
+  onError(error: Error) {
+    this.logger.error(`⚠️ BullMQ Worker encountered an error: ${error.message}`);
   }
 
   async process(job: Job<SendOtpJobPayload>): Promise<any> {

@@ -83,4 +83,19 @@ export class OtpRepository {
       },
     });
   }
+
+  async deleteById(id: string): Promise<Prisma.BatchPayload> {
+    return this.prisma.otp.deleteMany({
+      where: { id },
+    });
+  }
+
+  async deleteExpiredForUser(userId: string): Promise<Prisma.BatchPayload> {
+    return this.prisma.otp.deleteMany({
+      where: {
+        userId,
+        expiresAt: { lt: new Date() },
+      },
+    });
+  }
 }

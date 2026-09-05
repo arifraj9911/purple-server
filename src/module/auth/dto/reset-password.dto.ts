@@ -18,12 +18,12 @@ export class ResetPasswordDto {
   email: string;
 
   @ApiProperty({
-    example: '123456',
-    description: '6-digit OTP received via email',
+    example: '1234',
+    description: '4-digit OTP received via email',
   })
   @IsString()
   @IsNotEmpty({ message: 'OTP code cannot be empty' })
-  @Length(6, 6, { message: 'OTP code must be exactly 6 digits' })
+  @Length(4, 4, { message: 'OTP code must be exactly 4 digits' })
   otp: string;
 
   @ApiProperty({

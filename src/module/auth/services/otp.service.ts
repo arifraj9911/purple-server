@@ -17,11 +17,12 @@ export class OtpService {
   private readonly logger = new Logger(OtpService.name);
   private readonly OTP_TTL_MIN = 5;
   private readonly MAX_ATTEMPTS = 3;
-  private readonly COOLDOWN_MIN = 15;
+  private readonly COOLDOWN_MIN = 5;
 
   constructor(
     private readonly otpRepository: OtpRepository,
     @InjectQueue('mail-queue') private readonly mailQueue: Queue,
+    @InjectQueue('otp-queue') private readonly otpQueue: Queue,
   ) {}
 
   async generateAndSend(
@@ -29,20 +30,23 @@ export class OtpService {
     email: string,
     purpose: OtpPurpose,
   ): Promise<void> {
-    // 1. Generate cryptographically secure 6-digit OTP
-    const otp = crypto.randomInt(100000, 999999).toString();
+    // Clean up any previously expired OTPs for this user
+    await this.otpRepository.deleteExpiredForUser(userId);
+
+    // 1. Generate cryptographically secure 4-digit OTP
+    const otp = crypto.randomInt(1000, 10000).toString();
     const codeHash = hashSha256(otp);
     const expiresAt = new Date(Date.now() + this.OTP_TTL_MIN * 60 * 1000);
 
     // 2. Persist hashed OTP to repository
-    await this.otpRepository.create({
+    const otpRecord = await this.otpRepository.create({
       userId,
       codeHash,
       purpose,
       expiresAt,
     });
 
-    // 3. Dispatch to BullMQ for non-blocking asynchronous email delivery
+    // 3. Dispatch to BullMQ mail-queue for non-blocking asynchronous email delivery
     try {
       await this.mailQueue.add(
         'send-otp-email',
@@ -65,6 +69,26 @@ export class OtpService {
       );
       // Fallback: If Redis is unavailable in local dev, avoid blocking flow
     }
+
+    // 4. Dispatch delayed job to BullMQ otp-queue to auto-delete expired OTP after 5 minutes (no cron needed!)
+    try {
+      await this.otpQueue.add(
+        'cleanup-expired-otp',
+        { otpId: otpRecord.id },
+        {
+          delay: this.OTP_TTL_MIN * 60 * 1000, // 5 minutes
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+      this.logger.log(
+        `Scheduled auto-removal for OTP #${otpRecord.id} in 5 minutes via BullMQ`,
+      );
+    } catch (error: any) {
+      this.logger.warn(
+        `Could not schedule auto-removal job in BullMQ: ${error.message}`,
+      );
+    }
   }
 
   async verify(
@@ -82,11 +106,13 @@ export class OtpService {
     }
 
     if (otpRecord.expiresAt < new Date()) {
+      // Delete expired OTP immediately
+      await this.otpRepository.deleteById(otpRecord.id);
       throw new BadRequestException('OTP code has expired. Please request a new one.');
     }
 
     if (otpRecord.attempts >= this.MAX_ATTEMPTS) {
-      await this.otpRepository.markConsumed(otpRecord.id);
+      await this.otpRepository.deleteById(otpRecord.id);
       throw new BadRequestException(
         'Maximum verification attempts exceeded. Please request a new OTP.',
       );
@@ -100,8 +126,8 @@ export class OtpService {
       throw new BadRequestException('Invalid OTP code.');
     }
 
-    // Mark as consumed
-    await this.otpRepository.markConsumed(otpRecord.id);
+    // Successfully verified -> Remove OTP immediately from database
+    await this.otpRepository.deleteById(otpRecord.id);
     return true;
   }
 
@@ -124,7 +150,8 @@ export class OtpService {
       );
     }
 
-    // Invalidate pending OTPs for the same purpose
+    // Clean up expired or pending OTPs for the same purpose
+    await this.otpRepository.deleteExpiredForUser(userId);
     await this.otpRepository.invalidatePendingOtps(userId, purpose);
 
     // Generate and send new OTP

@@ -61,7 +61,7 @@ export class AuthController {
     @Body() _dto: LoginDto,
   ) {
     const user = req.user as any;
-    const tokens = await this.authService.issueTokens(user.id, {
+    const tokens = await this.authService.issueTokens(user.id, user.email, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -174,7 +174,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Google OAuth2 callback redirect' })
   async googleCallback(
     @Req() req: any,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
     const tokens = await this.authService.handleGoogleUser(req.user, {
       ip: req.ip,
@@ -184,7 +184,7 @@ export class AuthController {
     this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(frontendUrl);
+    res.redirect(frontendUrl);
   }
 
   /**

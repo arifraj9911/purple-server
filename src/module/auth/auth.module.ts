@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
+import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../../mail/mail.module';
 
@@ -12,6 +13,9 @@ import { RefreshTokenRepository } from './repositories/refresh-token.repository'
 // Services
 import { AuthService } from './services/auth.service';
 import { OtpService } from './services/otp.service';
+
+// Processors
+import { OtpProcessor } from './otp.processor';
 
 // Strategies
 import { LocalStrategy } from './strategies/local.strategy';
@@ -34,6 +38,9 @@ import { AuthController } from './auth.controller';
     JwtModule.register({}),
     PrismaModule,
     MailModule,
+    BullModule.registerQueue({
+      name: 'otp-queue',
+    }),
   ],
   controllers: [AuthController],
   providers: [
@@ -45,6 +52,9 @@ import { AuthController } from './auth.controller';
     // Business Logic Services
     AuthService,
     OtpService,
+
+    // BullMQ Processors
+    OtpProcessor,
 
     // Passport Strategies
     LocalStrategy,

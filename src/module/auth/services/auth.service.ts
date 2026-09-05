@@ -53,14 +53,14 @@ export class AuthService {
     // 1. Account Lockout Check
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       throw new ForbiddenException(
-        'Account is temporarily locked due to multiple failed login attempts. Please try again later.',
+        'Account is temporarily locked due to multiple failed login attempts. Please try again in 5 minutes.',
       );
     }
 
     // 2. Password Verification with Argon2
     const isPasswordValid = await comparePassword(pass, user.password);
     if (!isPasswordValid) {
-      await this.userRepository.incrementFailedLogin(user.id, 5, 15);
+      await this.userRepository.incrementFailedLogin(user.id, 5, 5);
       return null;
     }
 
@@ -95,6 +95,7 @@ export class AuthService {
     const hashedPassword = await hashPassword(dto.password);
     const user = await this.userRepository.create({
       email: dto.email,
+      fullName: dto.fullName,
       password: hashedPassword,
       isVerified: false,
       provider: Provider.LOCAL,
@@ -196,9 +197,10 @@ export class AuthService {
    */
   async issueTokens(
     userId: string,
+    email: string,
     meta?: ClientMetadata,
   ): Promise<TokenPair> {
-    const payload = { sub: userId };
+    const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_ACCESS_SECRET,
@@ -232,11 +234,16 @@ export class AuthService {
     tokenRecordId: string,
     meta?: ClientMetadata,
   ): Promise<TokenPair> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found.');
+    }
+
     // Revoke old refresh token (Rotation)
     await this.refreshTokenRepository.revokeById(tokenRecordId);
 
-    // Issue fresh pair
-    return this.issueTokens(userId, meta);
+    // Issue fresh pair with email
+    return this.issueTokens(userId, user.email, meta);
   }
 
   /**
@@ -262,7 +269,12 @@ export class AuthService {
    * Handle Google OAuth user authentication
    */
   async handleGoogleUser(
-    profile: { googleId: string; email: string; isVerified: boolean },
+    profile: {
+      googleId: string;
+      email: string;
+      fullName?: string;
+      isVerified: boolean;
+    },
     meta?: ClientMetadata,
   ): Promise<TokenPair> {
     let user = await this.userRepository.findByGoogleId(profile.googleId);
@@ -274,12 +286,14 @@ export class AuthService {
           where: { id: user.id },
           data: {
             googleId: profile.googleId,
+            fullName: user.fullName || profile.fullName,
             isVerified: true,
           },
         });
       } else {
         user = await this.userRepository.create({
           email: profile.email,
+          fullName: profile.fullName,
           googleId: profile.googleId,
           provider: Provider.GOOGLE,
           isVerified: profile.isVerified ?? true,
@@ -287,6 +301,6 @@ export class AuthService {
       }
     }
 
-    return this.issueTokens(user.id, meta);
+    return this.issueTokens(user.id, user.email, meta);
   }
 }

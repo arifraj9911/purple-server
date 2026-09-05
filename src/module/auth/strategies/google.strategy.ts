@@ -24,6 +24,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     return {
       googleId: profile.id,
       email: profile.emails?.[0]?.value,
+      fullName: profile.displayName || undefined,
       isVerified: profile.emails?.[0]?.verified ?? true,
     };
   }

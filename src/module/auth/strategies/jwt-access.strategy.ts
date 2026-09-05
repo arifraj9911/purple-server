@@ -20,7 +20,7 @@ export class JwtAccessStrategy extends PassportStrategy(
     });
   }
 
-  async validate(payload: { sub: string }) {
+  async validate(payload: { sub: string; email?: string }) {
     const user = await this.userRepository.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('User session no longer valid.');

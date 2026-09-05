@@ -12,12 +12,12 @@ export class VerifyOtpDto {
   email: string;
 
   @ApiProperty({
-    example: '123456',
-    description: '6-digit one-time password (OTP)',
+    example: '1234',
+    description: '4-digit one-time password (OTP)',
   })
   @IsString()
   @IsNotEmpty({ message: 'OTP code cannot be empty' })
-  @Length(6, 6, { message: 'OTP code must be exactly 6 digits' })
+  @Length(4, 4, { message: 'OTP code must be exactly 4 digits' })
   code: string;
 
   @ApiProperty({

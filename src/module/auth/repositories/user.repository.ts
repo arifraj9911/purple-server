@@ -44,7 +44,7 @@ export class UserRepository {
   async incrementFailedLogin(
     userId: string,
     lockThreshold = 5,
-    lockMinutes = 15,
+    lockMinutes = 5,
   ): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const newCount = (user?.failedLoginCount ?? 0) + 1;

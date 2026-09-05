@@ -28,7 +28,7 @@ export class TransformInterceptor<T>
     next: CallHandler,
   ): Observable<StandardApiResponse<T>> {
     const response = context.switchToHttp().getResponse();
-    const statusCode = response.statusCode ?? 200;
+    const statusCode = response?.statusCode ?? 200;
 
     const customMessage = this.reflector.get<string>(
       RESPONSE_MESSAGE_METADATA,
@@ -37,6 +37,11 @@ export class TransformInterceptor<T>
 
     return next.handle().pipe(
       map((data) => {
+        // If response headers have already been sent (e.g. redirect or manual response), do not wrap
+        if (response?.headersSent) {
+          return data;
+        }
+
         // If data already contains custom message property, extract it gracefully
         let message = customMessage || 'Operation completed successfully';
         let payload = data;

@@ -9,6 +9,14 @@ import {
 
 export class RegisterDto {
   @ApiProperty({
+    example: 'Arif Raj',
+    description: 'Full name of the user',
+  })
+  @IsString({ message: 'Full name must be a string' })
+  @IsNotEmpty({ message: 'Full name cannot be empty' })
+  fullName: string;
+
+  @ApiProperty({
     example: 'developer@purple-bd.com',
     description: 'Unique user email address',
   })

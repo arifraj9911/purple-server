@@ -12,19 +12,58 @@ generator client {
   output       = "../src/generated/prisma"
   moduleFormat = "cjs"
 }
-
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  posts Post[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  password         String?
+  isVerified       Boolean   @default(false)
+  provider         Provider  @default(LOCAL)
+  googleId         String?   @unique
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  otps          Otp[]
+  refreshTokens RefreshToken[]
 }
 
-model Post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean? @default(false)
-  author    User?    @relation(fields: [authorId], references: [id])
-  authorId  Int?
+enum Provider {
+  LOCAL
+  GOOGLE
+}
+
+model Otp {
+  id                   String     @id @default(uuid())
+  userId               String
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash             String
+  purpose              OtpPurpose
+  attempts             Int        @default(0)
+  maxAttemptsReachedAt DateTime?
+  expiresAt            DateTime
+  consumedAt           DateTime?
+  createdAt            DateTime   @default(now())
+
+  @@index([userId, purpose])
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  revoked    Boolean  @default(false)
+  replacedBy String?
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }

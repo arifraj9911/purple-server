@@ -19,7 +19,7 @@ import {
   hashPassword,
   hashSha256,
 } from '../../../common/utils/hash.util';
-import { OtpPurpose, Provider, User } from '../../../generated/prisma/client';
+import { OtpPurpose, Provider, User, Role } from '../../../generated/prisma/client';
 
 export interface TokenPair {
   accessToken: string;
@@ -97,6 +97,7 @@ export class AuthService {
       email: dto.email,
       fullName: dto.fullName,
       password: hashedPassword,
+      role: Role.USER,
       isVerified: false,
       provider: Provider.LOCAL,
     });
@@ -198,9 +199,10 @@ export class AuthService {
   async issueTokens(
     userId: string,
     email: string,
+    role: Role,
     meta?: ClientMetadata,
   ): Promise<TokenPair> {
-    const payload = { sub: userId, email };
+    const payload = { sub: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_ACCESS_SECRET,
@@ -242,8 +244,8 @@ export class AuthService {
     // Revoke old refresh token (Rotation)
     await this.refreshTokenRepository.revokeById(tokenRecordId);
 
-    // Issue fresh pair with email
-    return this.issueTokens(userId, user.email, meta);
+    // Issue fresh pair with email and role
+    return this.issueTokens(userId, user.email, user.role, meta);
   }
 
   /**
@@ -296,11 +298,12 @@ export class AuthService {
           fullName: profile.fullName,
           googleId: profile.googleId,
           provider: Provider.GOOGLE,
+          role: Role.USER,
           isVerified: profile.isVerified ?? true,
         });
       }
     }
 
-    return this.issueTokens(user.id, user.email, meta);
+    return this.issueTokens(user.id, user.email, user.role, meta);
   }
 }

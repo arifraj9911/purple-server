@@ -71,6 +71,7 @@ import { AuthController } from './auth.controller';
   exports: [
     AuthService,
     UserRepository,
+    RefreshTokenRepository,
     PassportModule,
     JwtModule,
   ],

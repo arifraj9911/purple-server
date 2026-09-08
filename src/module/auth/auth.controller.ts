@@ -61,7 +61,7 @@ export class AuthController {
     @Body() _dto: LoginDto,
   ) {
     const user = req.user as any;
-    const tokens = await this.authService.issueTokens(user.id, user.email, {
+    const tokens = await this.authService.issueTokens(user.id, user.email, user.role, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });

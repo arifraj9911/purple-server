@@ -8,12 +8,14 @@ import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { RESPONSE_MESSAGE_METADATA } from '../decorators/response-message.decorator';
+import { WITH_META_KEY } from '../decorators/with-meta.decorator';
 
 export interface StandardApiResponse<T> {
   success: boolean;
   statusCode: number;
   message: string;
   data: T;
+  meta?: any;
   timestamp: string;
 }
 
@@ -35,6 +37,11 @@ export class TransformInterceptor<T>
       context.getHandler(),
     );
 
+    const withMeta = this.reflector.getAllAndOverride<boolean>(
+      WITH_META_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     return next.handle().pipe(
       map((data) => {
         // If response headers have already been sent (e.g. redirect or manual response), do not wrap
@@ -42,11 +49,22 @@ export class TransformInterceptor<T>
           return data;
         }
 
-        // If data already contains custom message property, extract it gracefully
         let message = customMessage || 'Operation completed successfully';
         let payload = data;
+        let meta: any = undefined;
 
+        // If route has @WithMeta() decorator and returned data has { data, meta }
         if (
+          withMeta &&
+          data &&
+          typeof data === 'object' &&
+          'data' in data &&
+          'meta' in data
+        ) {
+          payload = (data as any).data;
+          meta = (data as any).meta;
+          message = (data as any).message || message;
+        } else if (
           data &&
           typeof data === 'object' &&
           'message' in data &&
@@ -57,14 +75,21 @@ export class TransformInterceptor<T>
           payload = (data as any).data !== undefined ? (data as any).data : null;
         }
 
-        return {
+        const result: StandardApiResponse<T> = {
           success: true,
           statusCode,
           message,
           data: payload ?? null,
           timestamp: new Date().toISOString(),
         };
+
+        if (meta !== undefined) {
+          result.meta = meta;
+        }
+
+        return result;
       }),
     );
   }
 }
+
